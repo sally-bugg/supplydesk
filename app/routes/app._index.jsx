@@ -6,7 +6,7 @@ import {
   InlineStack, BlockStack, Box, Modal, TextField, Select,
   Banner, Tabs, EmptyState, Divider,
 } from "@shopify/polaris";
-import { authenticate, prisma } from "../../shopify.server";
+import { authenticate, prisma } from "../shopify.server";
 
 // ─── Loader ───────────────────────────────────────────────────────────────────
 export async function loader({ request }) {
