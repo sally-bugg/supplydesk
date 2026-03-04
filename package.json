@@ -2,7 +2,7 @@
   "name": "supplydesk",
   "private": true,
   "scripts": {
-    "build": "node ./node_modules/.bin/remix vite:build",
+    "build": "remix vite:build",
     "dev": "shopify app dev",
     "config:link": "shopify app config link",
     "generate": "shopify app generate",
