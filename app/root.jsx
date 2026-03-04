@@ -1,3 +1,4 @@
+import { json } from "@remix-run/node";
 import {
   Links,
   Meta,
@@ -5,6 +6,15 @@ import {
   Scripts,
   ScrollRestoration,
 } from "@remix-run/react";
+import { addDocumentResponseHeaders } from "./shopify.server";
+
+export async function loader({ request }) {
+  const headers = new Headers();
+  addDocumentResponseHeaders(request, headers);
+  return json({}, { headers });
+}
+
+export const headers = ({ loaderHeaders }) => loaderHeaders;
 
 export default function App() {
   return (
