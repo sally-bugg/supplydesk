@@ -38,9 +38,10 @@ model Material {
   supplier       String?
   createdAt      DateTime        @default(now())
   updatedAt      DateTime        @updatedAt
-  bomLines       BomLine[]
-  subAsmLines    SubAsmLine[]
-  stockMovements StockMovement[]
+  bomLines           BomLine[]
+  subAsmLines        SubAsmLine[]
+  stockMovements     StockMovement[]
+  purchaseOrderLines PurchaseOrderLine[]
 
   @@unique([shop, sku])
 }
@@ -80,7 +81,8 @@ model Product {
   shopifyId String
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
-  bomLines  BomLine[]
+  bomLines       BomLine[]
+  productionRuns ProductionRun[]
 
   @@unique([shop, shopifyId])
 }
@@ -107,4 +109,35 @@ model StockMovement {
   reference  String
   note       String?
   createdAt  DateTime @default(now())
+}
+
+model ProductionRun {
+  id        String   @id @default(cuid())
+  shop      String
+  productId String
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  qty       Float
+  note      String?
+  createdAt DateTime @default(now())
+}
+
+model PurchaseOrder {
+  id         String              @id @default(cuid())
+  shop       String
+  supplier   String?
+  status     String              @default("draft")
+  note       String?
+  lines      PurchaseOrderLine[]
+  createdAt  DateTime            @default(now())
+  receivedAt DateTime?
+}
+
+model PurchaseOrderLine {
+  id              String        @id @default(cuid())
+  purchaseOrderId String
+  purchaseOrder   PurchaseOrder @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
+  materialId      String
+  material        Material      @relation(fields: [materialId], references: [id], onDelete: Cascade)
+  qty             Float
+  cost            Float         @default(0)
 }
