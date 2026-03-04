@@ -2,7 +2,7 @@
   "name": "supplydesk",
   "private": true,
   "scripts": {
-    "build": "remix vite:build",
+    "build": "prisma generate && remix vite:build",
     "dev": "shopify app dev",
     "config:link": "shopify app config link",
     "generate": "shopify app generate",
@@ -30,6 +30,7 @@
     "@shopify/polaris": "^13.7.0",
     "@shopify/shopify-app-remix": "^3.3.2",
     "@shopify/shopify-app-session-storage-prisma": "^5.1.2",
+    "@vercel/remix": "^2.16.7",
     "isbot": "^5.1.17",
     "prisma": "^5.19.1",
     "react": "^18.2.0",
