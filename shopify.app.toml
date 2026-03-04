@@ -2,7 +2,8 @@
 
 client_id = "71c5655fbef433f462fb60e79988add4"
 name = "SupplyDesk"
-application_url = "https://supplydesk.vercel.app"
+
+application_url = "https://supplydesk.vercel.app/app"
 embedded = true
 
 [webhooks]
