@@ -292,12 +292,12 @@ function flattenForDisplay(product) {
   for (const line of product.bomLines) {
     if (line.material) {
       const key = line.materialId;
-      map[key] = map[key] || { name: line.material.name, unit: line.material.unit, cost: line.material.cost, qty: 0, via: null };
+      map[key] = map[key] || { id: line.materialId, name: line.material.name, unit: line.material.unit, cost: line.material.cost, qty: 0, via: null };
       map[key].qty += line.qty;
     } else if (line.subAssembly) {
       for (const comp of line.subAssembly.components) {
         const key = comp.materialId;
-        map[key] = map[key] || { name: comp.material.name, unit: comp.material.unit, cost: comp.material.cost, qty: 0, via: line.subAssembly.name };
+        map[key] = map[key] || { id: comp.materialId, name: comp.material.name, unit: comp.material.unit, cost: comp.material.cost, qty: 0, via: line.subAssembly.name };
         map[key].qty += comp.qty * line.qty;
       }
     }
@@ -316,15 +316,23 @@ function getProductCOGS(product) {
 function getMaxProducible(product) {
   const flat = flattenForDisplay(product);
   if (!flat.length) return null;
-  const matMap = {};
+
+  const stockMap = {};
   for (const line of product.bomLines) {
-    if (line.material) matMap[line.material.id] = line.material;
-    if (line.subAssembly) for (const c of line.subAssembly.components) matMap[c.material.id] = c.material;
+    if (line.material) stockMap[line.material.id] = line.material.stock;
+    if (line.subAssembly) {
+      for (const c of line.subAssembly.components) {
+        stockMap[c.material.id] = c.material.stock;
+      }
+    }
   }
-  return Math.floor(Math.min(...flat.map(r => {
-    const mat = matMap[Object.keys(matMap).find(id => matMap[id].name === r.name)];
-    return mat ? mat.stock / r.qty : Infinity;
-  })));
+
+  return Math.floor(
+    Math.min(...flat.map(r => {
+      const stock = stockMap[r.id] ?? 0;
+      return r.qty > 0 ? stock / r.qty : Infinity;
+    }))
+  );
 }
 
 // ─── Component ────────────────────────────────────────────────────────────────
