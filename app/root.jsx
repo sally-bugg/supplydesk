@@ -14,6 +14,7 @@ export async function loader({ request }) {
   return json({}, { headers });
 }
 
+
 export const headers = ({ loaderHeaders }) => loaderHeaders;
 
 export default function App() {
