@@ -37,6 +37,7 @@ npm install -g @shopify/cli @shopify/theme
 # Install dependencies
 npm install
 
+
 # Copy env file and fill in your credentials
 cp .env.example .env
 ```
