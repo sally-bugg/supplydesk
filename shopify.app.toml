@@ -2,7 +2,7 @@
 
 client_id = "71c5655fbef433f462fb60e79988add4"
 name = "SupplyDesk"
-application_url = "https://supplydesk.vercel.app"
+application_url = "https://supplydesk-umber.vercel.app"
 embedded = true
 
 [webhooks]
@@ -16,7 +16,8 @@ optional_scopes = [ ]
 use_legacy_install_flow = false
 
 [auth]
-redirect_urls = ["https://supplydesk.vercel.app/auth/callback"]
+redirect_urls = ["https://supplydesk-umber.vercel.app/auth/callback"]
+
 
 [pos]
 embedded = false
