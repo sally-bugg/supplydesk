@@ -85,11 +85,16 @@ export default function BOM() {
   const nav = useNavigation();
   const isLoading = nav.state !== "idle";
   const [selectedProduct, setSelectedProduct] = useState(null);
+  const [search, setSearch] = useState("");
   const [bomMatForm, setBomMatForm] = useState({ materialId: "", qty: "1" });
   const [bomSubForm, setBomSubForm] = useState({ subAssemblyId: "", qty: "1" });
   const sub = (fd) => submit(fd, { method: "post" });
   const selectedProductData = selectedProduct ? products.find(p => p.id === selectedProduct) : null;
   const canMake = selectedProductData ? getMaxProducible(selectedProductData) : null;
+  const filteredProducts = products.filter(p =>
+    p.name.toLowerCase().includes(search.toLowerCase()) ||
+    p.sku.toLowerCase().includes(search.toLowerCase())
+  );
 
   return (
     <Page title="Bill of Materials" primaryAction={{ content: "Sync Shopify Products", loading: isLoading, onAction: () => { const fd = new FormData(); fd.append("intent","syncShopify"); sub(fd); } }}>
@@ -97,12 +102,13 @@ export default function BOM() {
         <Layout.Section variant="oneThird">
           <Card>
             <BlockStack gap="300">
-              <Text variant="headingMd" as="h2">Products</Text>
+              <Text variant="headingMd" as="h2">Products ({filteredProducts.length})</Text>
+              <TextField label="Search" labelHidden placeholder="Search by name or SKU..." value={search} onChange={setSearch} autoComplete="off" clearButton onClearButtonClick={() => setSearch("")} />
               <Divider />
               {products.length === 0
                 ? <Text tone="subdued" variant="bodySm">Sync your Shopify products first.</Text>
                 : <BlockStack gap="200">
-                    {products.map(prod => {
+                    {filteredProducts.map(prod => {
                       const cogs = getProductCOGS(prod);
                       const canMakeProd = getMaxProducible(prod);
                       const isSelected = selectedProduct === prod.id;
@@ -146,7 +152,8 @@ export default function BOM() {
               <Card>
                 <BlockStack gap="300">
                   <Text variant="headingMd" as="h2">BOM — {selectedProductData.name}</Text>
-                  <Divider />
+                  <TextField label="Search" labelHidden placeholder="Search by name or SKU..." value={search} onChange={setSearch} autoComplete="off" clearButton onClearButtonClick={() => setSearch("")} />
+              <Divider />
                   {selectedProductData.bomLines.length === 0
                     ? <Text tone="subdued">No BOM lines yet. Add components below.</Text>
                     : <DataTable
@@ -177,7 +184,8 @@ export default function BOM() {
               <Card>
                 <BlockStack gap="300">
                   <Text variant="headingMd" as="h2">Add Component</Text>
-                  <Divider />
+                  <TextField label="Search" labelHidden placeholder="Search by name or SKU..." value={search} onChange={setSearch} autoComplete="off" clearButton onClearButtonClick={() => setSearch("")} />
+              <Divider />
                   <InlineStack gap="300" align="end">
                     <Select label="Raw Material" options={[{ label: "Select...", value: "" }, ...materials.map(m => ({ label: `${m.name} (${m.stock} ${m.unit})`, value: m.id }))]} value={bomMatForm.materialId} onChange={v => setBomMatForm(f=>({...f,materialId:v}))} />
                     <TextField label="Qty" type="number" value={bomMatForm.qty} onChange={v => setBomMatForm(f=>({...f,qty:v}))} autoComplete="off" />
@@ -201,7 +209,8 @@ export default function BOM() {
                 <Card>
                   <BlockStack gap="300">
                     <Text variant="headingMd" as="h2">Flattened Raw Materials</Text>
-                    <Divider />
+                    <TextField label="Search" labelHidden placeholder="Search by name or SKU..." value={search} onChange={setSearch} autoComplete="off" clearButton onClearButtonClick={() => setSearch("")} />
+              <Divider />
                     <DataTable
                       columnContentTypes={["text","numeric","text","numeric","text"]}
                       headings={["Raw Material","Total Qty","Unit","Total Cost","Via"]}
