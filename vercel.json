@@ -1,5 +1,4 @@
 {
-  "framework": "remix",
-  "buildCommand": "npx prisma migrate deploy && npm run build",
+  "buildCommand": "npm run build",
   "installCommand": "npm install --legacy-peer-deps"
 }
