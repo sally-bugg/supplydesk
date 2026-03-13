@@ -3,7 +3,7 @@ import { useLoaderData } from "@remix-run/react";
 import { useState } from "react";
 import {
   Page, Layout, Card, DataTable, Badge, Text,
-  InlineStack, EmptyState, Select, Box, InlineGrid,
+  InlineStack, BlockStack, EmptyState, Select, Box, InlineGrid,
 } from "@shopify/polaris";
 import { authenticate, prisma } from "../shopify.server";
 
