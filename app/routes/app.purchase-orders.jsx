@@ -23,18 +23,58 @@ export async function loader({ request }) {
 }
 
 export async function action({ request }) {
-  const { session } = await authenticate.admin(request);
+  const { session, admin } = await authenticate.admin(request);
   const shop = session.shop;
   const fd = await request.formData();
   const intent = fd.get("intent");
 
   if (intent === "createPO") {
-    await prisma.purchaseOrder.create({
+    // 1. Create PO in our database
+    const po = await prisma.purchaseOrder.create({
       data: { shop, supplier: fd.get("supplier") || null, note: fd.get("note") || null },
     });
+
+    // 2. Create a Draft Order in Shopify
+    try {
+      const response = await admin.graphql(`
+        mutation draftOrderCreate($input: DraftOrderInput!) {
+          draftOrderCreate(input: $input) {
+            draftOrder { id }
+            userErrors { field message }
+          }
+        }
+      `, {
+        variables: {
+          input: {
+            note: `SupplyDesk PO | Supplier: ${fd.get("supplier") || "Unknown"} | ${new Date().toLocaleDateString()}`,
+            tags: ["supplydesk-po", `po-${po.id.slice(-6).toUpperCase()}`],
+            lineItems: [
+              {
+                title: `Purchase Order — ${fd.get("supplier") || "Unknown supplier"}`,
+                quantity: 1,
+                originalUnitPrice: "0.00",
+              },
+            ],
+          },
+        },
+      });
+      const data = await response.json();
+      const draftOrderId = data?.data?.draftOrderCreate?.draftOrder?.id;
+      if (draftOrderId) {
+        await prisma.purchaseOrder.update({
+          where: { id: po.id },
+          data: { shopifyDraftOrderId: draftOrderId },
+        });
+      }
+    } catch (err) {
+      console.error("[SupplyDesk] Failed to create Shopify Draft Order:", err);
+    }
+
     return json({ ok: true });
   }
+
   if (intent === "addPOLine") {
+    // Add line to our DB
     await prisma.purchaseOrderLine.create({
       data: {
         purchaseOrderId: fd.get("purchaseOrderId"),
@@ -43,16 +83,111 @@ export async function action({ request }) {
         cost: +fd.get("cost"),
       },
     });
+
+    // Rebuild Draft Order lines in Shopify to reflect all current lines
+    const po = await prisma.purchaseOrder.findUnique({
+      where: { id: fd.get("purchaseOrderId") },
+      include: { lines: { include: { material: true } } },
+    });
+
+    if (po?.shopifyDraftOrderId) {
+      try {
+        await admin.graphql(`
+          mutation draftOrderUpdate($id: ID!, $input: DraftOrderInput!) {
+            draftOrderUpdate(id: $id, input: $input) {
+              draftOrder { id }
+              userErrors { field message }
+            }
+          }
+        `, {
+          variables: {
+            id: po.shopifyDraftOrderId,
+            input: {
+              lineItems: po.lines.map(l => ({
+                title: l.material.name,
+                sku: l.material.sku,
+                quantity: Math.max(1, Math.round(l.qty)),
+                originalUnitPrice: String(l.cost.toFixed(2)),
+              })),
+            },
+          },
+        });
+      } catch (err) {
+        console.error("[SupplyDesk] Failed to update Shopify Draft Order lines:", err);
+      }
+    }
+
     return json({ ok: true });
   }
+
   if (intent === "deletePOLine") {
     await prisma.purchaseOrderLine.delete({ where: { id: fd.get("id") } });
+
+    // Rebuild Draft Order lines after deletion
+    const poId = fd.get("purchaseOrderId");
+    if (poId) {
+      const po = await prisma.purchaseOrder.findUnique({
+        where: { id: poId },
+        include: { lines: { include: { material: true } } },
+      });
+      if (po?.shopifyDraftOrderId) {
+        try {
+          await admin.graphql(`
+            mutation draftOrderUpdate($id: ID!, $input: DraftOrderInput!) {
+              draftOrderUpdate(id: $id, input: $input) {
+                draftOrder { id }
+                userErrors { field message }
+              }
+            }
+          `, {
+            variables: {
+              id: po.shopifyDraftOrderId,
+              input: {
+                lineItems: po.lines.length > 0
+                  ? po.lines.map(l => ({
+                      title: l.material.name,
+                      sku: l.material.sku,
+                      quantity: Math.max(1, Math.round(l.qty)),
+                      originalUnitPrice: String(l.cost.toFixed(2)),
+                    }))
+                  : [{ title: "No lines yet", quantity: 1, originalUnitPrice: "0.00" }],
+              },
+            },
+          });
+        } catch (err) {
+          console.error("[SupplyDesk] Failed to update Shopify Draft Order after line delete:", err);
+        }
+      }
+    }
+
     return json({ ok: true });
   }
+
   if (intent === "deletePO") {
+    const po = await prisma.purchaseOrder.findUnique({ where: { id: fd.get("id") } });
+
+    // Delete Draft Order in Shopify
+    if (po?.shopifyDraftOrderId) {
+      try {
+        await admin.graphql(`
+          mutation draftOrderDelete($input: DraftOrderDeleteInput!) {
+            draftOrderDelete(input: $input) {
+              deletedId
+              userErrors { field message }
+            }
+          }
+        `, {
+          variables: { input: { id: po.shopifyDraftOrderId } },
+        });
+      } catch (err) {
+        console.error("[SupplyDesk] Failed to delete Shopify Draft Order:", err);
+      }
+    }
+
     await prisma.purchaseOrder.delete({ where: { id: fd.get("id") } });
     return json({ ok: true });
   }
+
   if (intent === "receivePO") {
     const poId = fd.get("id");
     const po = await prisma.purchaseOrder.findUnique({
@@ -60,6 +195,8 @@ export async function action({ request }) {
       include: { lines: { include: { material: true } } },
     });
     if (!po || po.status === "received") return json({ ok: false });
+
+    // 1. Update stock in our DB and log movements
     for (const line of po.lines) {
       await prisma.material.update({
         where: { id: line.materialId },
@@ -76,18 +213,38 @@ export async function action({ request }) {
         },
       });
     }
+
     await prisma.purchaseOrder.update({
       where: { id: poId },
       data: { status: "received", receivedAt: new Date() },
     });
+
+    // 2. Complete the Draft Order in Shopify so it syncs to Xero via A2X
+    if (po.shopifyDraftOrderId) {
+      try {
+        await admin.graphql(`
+          mutation draftOrderComplete($id: ID!) {
+            draftOrderComplete(id: $id) {
+              draftOrder { id status }
+              userErrors { field message }
+            }
+          }
+        `, {
+          variables: { id: po.shopifyDraftOrderId },
+        });
+      } catch (err) {
+        console.error("[SupplyDesk] Failed to complete Shopify Draft Order:", err);
+      }
+    }
+
     return json({ ok: true });
   }
+
   return json({ ok: false });
 }
 
 const fmt = (n) => `$${Number(n).toFixed(2)}`;
 const poRef = (po) => `PO-${po.id.slice(-6).toUpperCase()}`;
-
 const emptyPOForm = { supplier: "", note: "" };
 
 export default function PurchaseOrders() {
@@ -168,6 +325,9 @@ export default function PurchaseOrders() {
                             <Text variant="bodySm" tone="subdued">{new Date(po.createdAt).toLocaleDateString()}</Text>
                             <Text variant="bodySm" fontWeight="medium">{fmt(total)}</Text>
                           </InlineStack>
+                          {po.shopifyDraftOrderId && (
+                            <Badge tone="info" size="small">Synced to Shopify</Badge>
+                          )}
                         </BlockStack>
                       </Box>
                     );
@@ -181,18 +341,19 @@ export default function PurchaseOrders() {
         <Layout.Section>
           {selectedPOData ? (
             <BlockStack gap="400">
-              {/* PO Header Card */}
               <Card>
                 <BlockStack gap="400">
                   <InlineStack align="space-between" blockAlign="start">
                     <BlockStack gap="200">
                       <Text variant="headingXl" fontWeight="bold">{poRef(selectedPOData)}</Text>
-                      <Badge
-                        tone={selectedPOData.status === "received" ? "success" : "attention"}
-                        size="large"
-                      >
-                        {selectedPOData.status === "received" ? "Received" : "Draft"}
-                      </Badge>
+                      <InlineStack gap="200">
+                        <Badge tone={selectedPOData.status === "received" ? "success" : "attention"} size="large">
+                          {selectedPOData.status === "received" ? "Received" : "Draft"}
+                        </Badge>
+                        {selectedPOData.shopifyDraftOrderId && (
+                          <Badge tone="info">Synced to Shopify</Badge>
+                        )}
+                      </InlineStack>
                     </BlockStack>
                     {selectedPOData.status === "draft" && (
                       <InlineStack gap="200">
@@ -258,14 +419,13 @@ export default function PurchaseOrders() {
                   )}
 
                   {selectedPOData.status === "received" && (
-                    <Banner tone="success" title="Stock updated successfully">
-                      All lines were received and inventory was updated on {new Date(selectedPOData.receivedAt).toLocaleDateString()}.
+                    <Banner tone="success" title="Stock updated and Shopify Draft Order completed">
+                      All lines were received, inventory was updated, and the Draft Order in Shopify has been marked as complete for Xero sync via A2X.
                     </Banner>
                   )}
                 </BlockStack>
               </Card>
 
-              {/* Order Lines */}
               <Card>
                 <BlockStack gap="300">
                   <Text variant="headingMd" as="h2">Order Lines</Text>
@@ -288,6 +448,7 @@ export default function PurchaseOrders() {
                               const fd = new FormData();
                               fd.append("intent", "deletePOLine");
                               fd.append("id", l.id);
+                              fd.append("purchaseOrderId", selectedPOData.id);
                               sub(fd);
                             }}>Remove</Button>
                           ) : null,
@@ -305,7 +466,6 @@ export default function PurchaseOrders() {
                 </BlockStack>
               </Card>
 
-              {/* Add Line */}
               {selectedPOData.status === "draft" && (
                 <Card>
                   <BlockStack gap="300">
@@ -353,7 +513,7 @@ export default function PurchaseOrders() {
                   image="https://cdn.shopify.com/s/files/1/0262/4071/2726/files/emptystate-files.png"
                   action={{ content: "New Purchase Order", onAction: () => { setPoForm(emptyPOForm); setShowCreateModal(true); } }}
                 >
-                  <p>Select a PO from the list to view its details, add line items, and mark it as received when stock arrives.</p>
+                  <p>Each PO automatically creates a Draft Order in Shopify with individual line items, ready to sync to Xero via A2X.</p>
                 </EmptyState>
               </Box>
             </Card>
@@ -382,6 +542,9 @@ export default function PurchaseOrders() {
       >
         <Modal.Section>
           <BlockStack gap="400">
+            <Banner tone="info" title="This will also create a Draft Order in Shopify">
+              Each PO will appear in your Shopify Draft Orders with individual line items and sync to Xero via A2X. Marking it as received will complete the Draft Order automatically.
+            </Banner>
             <TextField
               label="Supplier Name"
               value={poForm.supplier}
