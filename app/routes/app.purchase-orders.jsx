@@ -355,35 +355,40 @@ export default function PurchaseOrders() {
                         )}
                       </InlineStack>
                     </BlockStack>
-                    {selectedPOData.status === "draft" && (
-                      <InlineStack gap="200">
-                        <Button
-                          variant="primary"
-                          onClick={() => {
-                            const fd = new FormData();
-                            fd.append("intent", "receivePO");
-                            fd.append("id", selectedPOData.id);
-                            sub(fd);
-                            setSelectedPO(null);
-                          }}
-                        >
-                          Mark as Received
-                        </Button>
-                        <Button
-                          tone="critical"
-                          variant="plain"
-                          onClick={() => {
-                            const fd = new FormData();
-                            fd.append("intent", "deletePO");
-                            fd.append("id", selectedPOData.id);
-                            sub(fd);
-                            setSelectedPO(null);
-                          }}
-                        >
-                          Delete PO
-                        </Button>
-                      </InlineStack>
-                    )}
+                    <InlineStack gap="200">
+                      <Button onClick={() => window.open(`/app/purchase-orders/${selectedPOData.id}/print`, "_blank")}>
+                        Download PDF
+                      </Button>
+                      {selectedPOData.status === "draft" && (
+                        <>
+                          <Button
+                            variant="primary"
+                            onClick={() => {
+                              const fd = new FormData();
+                              fd.append("intent", "receivePO");
+                              fd.append("id", selectedPOData.id);
+                              sub(fd);
+                              setSelectedPO(null);
+                            }}
+                          >
+                            Mark as Received
+                          </Button>
+                          <Button
+                            tone="critical"
+                            variant="plain"
+                            onClick={() => {
+                              const fd = new FormData();
+                              fd.append("intent", "deletePO");
+                              fd.append("id", selectedPOData.id);
+                              sub(fd);
+                              setSelectedPO(null);
+                            }}
+                          >
+                            Delete PO
+                          </Button>
+                        </>
+                      )}
+                    </InlineStack>
                   </InlineStack>
 
                   <Divider />
