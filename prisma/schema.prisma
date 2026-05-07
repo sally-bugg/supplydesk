@@ -122,14 +122,15 @@ model ProductionRun {
 }
 
 model PurchaseOrder {
-  id         String              @id @default(cuid())
-  shop       String
-  supplier   String?
-  status     String              @default("draft")
-  note       String?
-  lines      PurchaseOrderLine[]
-  createdAt  DateTime            @default(now())
-  receivedAt DateTime?
+  id                  String              @id @default(cuid())
+  shop                String
+  supplier            String?
+  status              String              @default("draft")
+  note                String?
+  shopifyDraftOrderId String?             // ← add this line
+  lines               PurchaseOrderLine[]
+  createdAt           DateTime            @default(now())
+  receivedAt          DateTime?
 }
 
 model PurchaseOrderLine {
