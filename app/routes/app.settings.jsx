@@ -22,6 +22,7 @@ export async function loader({ request }) {
   });
   const url = new URL(request.url);
   return json({
+shop: session.shop,
     connected: !!xeroToken,
     justConnected: url.searchParams.get("xero") === "connected",
     xeroError: url.searchParams.get("xero") === "error",
@@ -38,11 +39,11 @@ export async function action({ request }) {
 }
 
 export default function Settings() {
-  const { connected, justConnected, xeroError } = useLoaderData();
+  const { connected, justConnected, xeroError, shop } = useLoaderData();
   const submit = useSubmit();
 
   function handleConnect() {
-    window.open("/auth/xero", "_top");
+    window.open(\/auth/xero?shop=${shop}`, "_top");`
   }
 
   function handleDisconnect() {
