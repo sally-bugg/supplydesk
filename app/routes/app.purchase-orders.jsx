@@ -7,7 +7,7 @@ import {
   EmptyState, Divider, Banner, Box, InlineGrid,
 } from "@shopify/polaris";
 import { authenticate, prisma } from "../shopify.server";
-
+import { createXeroBill } from "../xero.server";
 export async function loader({ request }) {
   const { session } = await authenticate.admin(request);
   const shop = session.shop;
@@ -218,7 +218,21 @@ export async function action({ request }) {
       where: { id: poId },
       data: { status: "received", receivedAt: new Date() },
     });
-
+    // 3. Sync to Xero as a Bill
+    try {
+      await createXeroBill(shop, {
+        ...po,
+        lines: po.lines.map((l) => ({
+          materialName: l.material?.name,
+          sku: l.material?.sku,
+          quantity: l.qty,
+          unitCost: l.cost,
+        })),
+      });
+    } catch (xeroErr) {
+      console.error("[SupplyDesk] Xero sync failed:", xeroErr);
+      // Don't fail the PO receive if Xero is not connected or fails
+    }
     // 2. Complete the Draft Order in Shopify so it syncs to Xero via A2X
     if (po.shopifyDraftOrderId) {
       try {
