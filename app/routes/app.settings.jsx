@@ -43,7 +43,7 @@ export default function Settings() {
   const submit = useSubmit();
 
   function handleConnect() {
-    window.open(\/auth/xero?shop=${shop}`, "_top");`
+    window.open(`/auth/xero?shop=${shop}`, "_top");
   }
 
   function handleDisconnect() {
