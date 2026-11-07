@@ -1,80 +1,144 @@
 ---
 name: meta-ads-analyzer
-description: Analyse Meta (Facebook/Instagram) ad performance and say what to cut, keep, or scale. Use when the user asks how their Meta/Facebook/Instagram ads are doing, wants a weekly ads check, asks about ROAS, spend, CPA, creative fatigue, wasted budget, or "what should I change in my ads". Read-only; never changes campaigns without explicit approval.
+description: "Provides expert-level analysis and diagnosis for Meta Ads campaigns. Use this skill to interpret performance data, identify root causes of issues, and generate actionable recommendations, with a special focus on correctly handling the 'Breakdown Effect'. Use when the user mentions Meta Ads analysis, campaign diagnosis, ad performance, CPA analysis, ROAS analysis, or asks to analyze exported data from Meta Ads Manager."
 ---
 
-# Meta Ads Analyzer
+# Meta Ads Analysis & Diagnosis Skill
 
-Gives a short, decision-ready read on Meta ad performance: what's making money, what's wasting it, and the 1–3 changes worth making this week.
+## When to Use This Skill
 
-## Ground rules
+Use this skill when you need to **analyze and diagnose Meta Ads campaign performance**, including:
+- Interpreting campaign, ad set, or ad-level performance data
+- Identifying root causes of performance issues
+- Generating actionable optimization recommendations
+- Understanding why Meta's system makes certain budget allocation decisions
+- Analyzing CSV exports, screenshots, or raw data from Meta Ads Manager
 
-- **Read-only by default.** Never call `ads_update_entity`, `ads_activate_entity`, or any create/delete tool unless the user approves that exact change in this conversation. Propose changes; don't make them.
-- **Numbers come from tools, never memory.** If a tool fails or returns nothing, say so. Don't fill gaps with estimates.
-- **Judge against break-even, not vibes.** A 2.0 ROAS is great at 70% margin and a loss at 40%.
-- **Small samples lie.** Don't call a winner or loser on fewer than ~1,000 impressions or under ~3 conversions. Flag it as "too early".
-- Tag each key claim **[Certain]** (straight from data), **[Likely]** (strong inference), or **[Guessing]**.
+## Result Recommendations (MANDATORY for Final Reports)
 
-## Workflow
+> **IMPORTANT:** The following rules are **MANDATORY** and **MUST be strictly followed** when writing the final analysis report. These are not optional guidelines — they define the required standards for all deliverables.
 
-### 1. Find the account
-Call `ads_get_ad_accounts`. If there's one queryable account, use it. If several, ask which. If `is_queryable` is false, report `not_queryable_reason` and stop.
+- **NEVER recommend pausing or reducing budget for any segment based solely on higher average CPA/CPM in breakdown reports.** Higher average cost does NOT mean poor performance — it often reflects the system capturing low *marginal* cost opportunities earlier. Removing segments may increase overall costs. Always frame changes as testable hypotheses, not directives.
+- **ALWAYS justify recommendations with data evidence, Meta's system mechanics, and expected impact on *overall campaign performance*.**
+- **EVERY insight must include data evidence and explanation.** Every recommendation must be actionable and verifiable.
+- **ALIGN WITH OFFICIAL RECOMMENDATIONS.** Check Meta's recommendations first (`ads_get_opportunity_score` in the connected Meta Ads tools). If diverging, explicitly acknowledge and explain why.
+- **Disambiguate clicks.** Never use the term "clicks" alone. Use "Clicks (all)" for total interactions (likes, shares, page clicks, link clicks) or "Link Clicks" for clicks that lead offsite; these are distinct metrics with different meanings.
+- **Audience size:** When reporting reach or audience size, use "Accounts Center accounts" or the number without unit — never "people" — per legal requirements.
 
-### 2. Get the break-even ROAS
-Break-even ROAS = 1 ÷ gross margin (after COGS, shipping, payment fees).
-- If the user has given a margin or target ROAS, use it.
-- Otherwise ask once: "What's your rough gross margin, or the ROAS you need to break even?"
-- If they don't know, use 2.5 as a placeholder and label it **[Guessing]**.
+## Metric Naming Guidelines
 
-### 3. Pull the data (in this order)
-Use `advertiser_job: "assess_and_optimize_performance"` (or `explain_poor_results` if they're asking why things got worse).
+**IMPORTANT:** Always rename metric names to standardized, non-sensitive names exactly as specified below in all responses:
 
-1. `ads_get_ad_entities`, `level: "ad_account"`, `date_preset: "last_7d"` and again with `last_28d`. This gives overall spend, results, and ROAS, and shows whether the last week is better or worse than the month.
-2. `ads_get_ad_entities`, `level: "campaign"`, `last_28d`, filtered to `effective_status IN ["ACTIVE"]`, sorted by spend descending.
-3. `ads_get_ad_entities`, `level: "ad"`, `last_28d`, `reporting_purpose: ["creative"]`, sorted by spend descending, limit 20.
-4. **Follow every read-only `next_actions` item** the entity calls return before writing the answer.
-5. `ads_insights_anomaly_signal`: sudden spikes and drops.
-6. `ads_insights_performance_vs_peers`, `last_28d`: is this good or bad compared with similar advertisers?
-7. `ads_get_opportunity_score`: Meta's own recommendations. Treat as suggestions, not gospel; Meta's advice tends to favour spending more.
+| Raw Metric Name | Standardized Display Name |
+| :--- | :--- |
+| `impressions` | Impressions |
+| `video_thruplay_watched_actions` | ThruPlays |
+| `clicks` | Clicks (all) |
+| `purchase_roas` | Purchase ROAS (return on ad spend) |
+| `cpm` | CPM |
+| `cpc` | CPC (all) |
+| `ctr` | CTR (all) |
+| `cost_per_action_type:link_click` | CPC (Link Click) |
+| `outbound_clicks_ctr` | Outbound CTR |
+| `cost_per_action_type:purchase` | Cost per Purchase |
+| `actions:purchase` | Purchases |
+| `action_values:purchase` | Purchase Value |
+| `frequency` | Frequency |
+| `reach` | Reach (Accounts Center accounts) |
+| `spend` | Amount Spent |
 
-Verify any non-default field with `ads_get_field_context` before requesting it. Never invent field names.
+## Core Principles
 
-### 4. Sort ads into buckets
-For each ad with enough data:
+- **Holistic First:** Evaluate at aggregate level before drilling down. The system optimizes for the whole, not the parts.
+- **Dynamic over Static:** Analyze performance over time, not single snapshots.
+- **Marginal over Average:** The system prioritizes marginal CPA (cost of the *next* result), not average CPA. A higher average CPA segment might be preventing even higher marginal costs elsewhere.
 
-| Bucket | Rule |
-|---|---|
-| **Scale** | ROAS ≥ 1.3 × break-even, stable or improving over 7d vs 28d |
-| **Keep** | ROAS between break-even and 1.3 × break-even |
-| **Fix or cut** | ROAS below break-even after meaningful spend (≥ 2 × target CPA with no sale = cut) |
-| **Fatigued** | Frequency > 3 (prospecting) and CTR down > 25% or CPM up > 25% (7d vs 28d) |
-| **Too early** | Below the sample thresholds above |
+## Meta Ads Domain Knowledge
 
-### 5. Write the report
-Keep it phone-readable. Lead with the verdict.
+### Legal Requirements & Terminology
 
-```
-**Verdict:** <one line: profitable / break-even / losing money, and the trend>
+- **Audience Size Metrics:** Due to legal requirements, when referring to audience size metrics (the total number of accounts that view the ad), you must use "Accounts Center accounts" (case insensitive) or report the metric without any unit instead of "people".
+- **"People" Usage:** When "people" is used in contexts referring to audience size, replace with "Accounts Center accounts". When a **specific number** is used with "people" (e.g., "17,000 people"), use **"person"** after the number (e.g., "17,000 person").
 
-**Last 7 days vs last 28 days**
-Spend · Purchases · ROAS (vs break-even X) · CPA · CTR · CPM
+### Campaign & Performance Definitions
 
-**Do this week** (max 3, biggest money impact first)
-1. <action> — <why, with the number> — <expected effect> [confidence]
+- **Conversion Ads:** Ad entities with objectives like Lead, Sales, or App Promotions are categorized as conversion ads.
+- **Conversion Rate:** Conversion rate = conversions / impressions.
+- **Performance Indicators:** Lower Cost Per Result or CPM = higher performance. Higher ROAS = higher performance.
 
-**Wasting money**: ads/campaigns below break-even, with spend
-**Worth scaling**: ads above 1.3× break-even, with suggested budget step (+20–30%, not doubling)
-**Fatigue watch**: ads with rising frequency and falling CTR
-**Anomalies / Meta recommendations**: only the ones that matter
-**Too early to call**: list briefly
-```
+### Account & Asset Issues
 
-End with: "Want me to make any of these changes?" Only act on a clear yes, and confirm each change (entity, old value → new value) before calling a write tool.
+- **Disabled or Restricted Account:** Occurs when assets (FB account, IG account, ad account, page, payout account) have been disabled or restricted by Meta, usually due to policy violations.
 
-## Things to watch for
+### Budget & Billing
 
-- **Attribution inflation:** Meta's default (7-day click, 1-day view) over-credits Meta. If Shopify revenue is available, compare total Meta-reported purchase value against actual Shopify sales for the same period and flag a big gap.
-- **Learning phase:** ad sets with fewer than ~50 conversions a week behave erratically. Don't recommend edits to an ad set that's still learning unless it's clearly burning cash.
-- **Budget changes:** suggest increases of 20–30% at a time; big jumps reset learning.
-- **Retargeting vs prospecting:** retargeting ROAS always looks better. Don't move prospecting budget into retargeting based on ROAS alone.
-- **Currency:** report in the account's currency and say which it is.
+- **Daily Spending Limit (DSL):** The current daily spending limit that advertisers can check, increase, or decrease.
+- **Billing Threshold (Payment Threshold):** The amount of ad spend that triggers a payment method charge when reached.
+
+## Analysis Workflow
+
+**Reference Documents** (loaded automatically from `references/`):
+- `breakdown_effect.md` - The Breakdown Effect with examples (READ THIS FIRST)
+- `core_concepts.md` - Ad Auction, Pacing, Learning Phase overview
+- `learning_phase.md` - Learning phase mechanics
+- `ad_relevance_diagnostics.md` - Quality, Engagement, Conversion rankings
+- `auction_overlap.md` - Diagnosing auction overlap
+- `pacing.md` - Budget and bid pacing
+- `bid_strategies.md` - Spend-based, goal-based, manual bidding
+- `ad_auctions.md` - How auction winners are determined
+- `performance_fluctuations.md` - Normal vs. concerning fluctuations
+
+### Step 1: Identify the Correct Evaluation Level
+
+This is the most critical step to avoid the Breakdown Effect.
+
+| Campaign Setup | Correct Evaluation Level |
+| :--- | :--- |
+| Advantage+ Campaign Budget (CBO) | **Campaign Level** |
+| Automatic Placements (without CBO) | **Ad Set Level** |
+| Multiple Ads within a single Ad Set | **Ad Set Level** |
+
+### Step 2: Check Learning Phase Status
+
+Before any analysis:
+- Is the ad set still in learning phase? (~50 optimization events needed)
+- Were there recent significant edits that reset learning?
+- If in learning: caveat all findings as preliminary
+
+### Step 3: Analyze with Meta-Specific Lens
+
+Focus on these analytical angles:
+
+1. **Marginal Efficiency Analysis:** Infer marginal CPA trends from time-series data. A segment with low average CPA but rising marginal CPA explains why the system shifts budget away.
+2. **Ad Relevance Diagnostics:** Check Quality, Engagement, and Conversion Rate Rankings to diagnose creative, targeting, or post-click issues.
+3. **Auction Overlap Check:** Are ad sets competing against each other? Look for learning limited status and underdelivery.
+4. **Pacing Analysis:** Is the system holding back budget for better opportunities? Evaluate over full campaign, not daily snapshots.
+5. **Performance Fluctuation Assessment:** Is this normal variation (20-30% day-to-day) or a concerning trend (>50% sustained)?
+
+### Step 4: Synthesize Findings Through Breakdown Effect Lens
+
+Interpret ALL findings through the **Breakdown Effect** framework. Explain *why* the system makes certain decisions.
+
+> **Example:** "While Placement A shows $10 average CPA vs Placement B's $15, time-series analysis reveals Placement A's CPA rising sharply — its marginal CPA likely exceeds Placement B's. The system correctly shifts budget to secure more conversions at lower marginal cost."
+
+### Step 5: Generate Report
+
+Structure every analysis report as:
+
+1. **Executive Summary** - 2-3 key findings
+2. **Evaluation Level** - Which level and why
+3. **Learning Phase Status** - Current state per ad set
+4. **Performance Analysis** - Metrics with proper naming
+5. **Diagnosis** - Root causes with evidence
+6. **Recommendations** - Actionable, with expected impact, framed as testable hypotheses
+7. **Breakdown Effect Notes** - Explicit callouts where this applies
+
+## Live Data via the Connected Meta Ads Tools
+
+This project uses the claude.ai Meta Ads connector (`mcp__Meta_Ads__*`), not the standalone `meta-ads-mcp` server from the original repo.
+
+- **Read-only by default.** Never call `ads_update_entity`, `ads_activate_entity`, or any create/delete tool unless the user approves that exact change (entity, old value → new value) in the conversation.
+- **Order of calls:** `ads_get_ad_accounts` → `ads_get_ad_entities` (account level, then campaign, then ad; compare `last_7d` with `last_28d`) → follow every read-only `next_actions` item it returns → `ads_insights_anomaly_signal` → `ads_insights_performance_vs_peers` → `ads_get_opportunity_score`.
+- Verify any non-default field with `ads_get_field_context` before requesting it. Never invent field names.
+- **Judge profit against break-even ROAS** (1 ÷ gross margin after COGS, shipping and fees). Ask the user for their margin once; if unknown, assume a break-even ROAS of 2.5 and label it as an assumption. Lead the Executive Summary with whether the account is above or below break-even.
+- Report in the ad account's currency and say which currency it is.
